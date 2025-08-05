@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+
+    <!-- Configuration Properties -->
+    <configuration-properties doc:name="Configuration Properties" file="config.yaml" />
+    <secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" file="secure.yaml" key="mulesoftmulesoft" />
+
+    <!-- HTTP Listener Configuration -->
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+        <http:listener-connection host="${http.listener.host}" port="${http.listener.port}" />
+    </http:listener-config>
+
+    <!-- HTTP Request Configuration -->
+    <http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration">
+        <http:request-connection>
+            <http:authentication>
+                <http:basic-authentication username="${security.basic.username}" password="${security.basic.password}" />
+            </http:authentication>
+        </http:request-connection>
+    </http:request-config>
+
+    <!-- Global Error Handler -->
+    <error-handler name="Global_Error_Handler">
+        <on-error-propagate type="ANY">
+            <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+                    output application/json
+                    ---
+                    {
+                        "status": "error",
+                        "message": error.description,
+                        "code": error.errorType.identifier
+                    }
+                    ]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus">500</ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+            <logger level="ERROR" message="Error occurred: #[error.description]" category="com.mycompany.error" />
+        </on-error-propagate>
+    </error-handler>
+
+</mule>

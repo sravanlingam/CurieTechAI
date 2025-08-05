@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+      xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
       xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns="http://www.mulesoft.org/schema/mule/core"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
@@ -7,50 +9,70 @@
       xsi:schemaLocation="
       http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
       http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+      http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+      http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
 
-    <http:listener-config name="L1" >
-        <http:listener-connection host="0.0.0.0" port="9090"/>
-    </http:listener-config>
+    <!-- Import global configurations -->
+    <import file="global.xml" />
 
-    <!-- Mixing everything in one place with unclear flow naming -->
-    <http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="f4b65188-6441-4f1b-a4f9-04cf152daea5" >
-		<http:request-connection >
-			<http:authentication >
-				<http:basic-authentication username="sravanlingam" password="mule12345" />
-			</http:authentication>
-		</http:request-connection>
-	</http:request-config>
-	<flow name="doItAll">
-        <http:listener path="/go" config-ref="L1"/>
+    <!-- Main flow with improved structure and best practices -->
+    <flow name="doItAll" doc:name="Process API Request">
+        <http:listener path="${http.listener.path}" config-ref="HTTP_Listener_config" doc:name="HTTP Listener">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
 
-        <!-- Overwriting payload repeatedly for no reason -->
-        <set-payload value="hi"/>
-        <set-payload value="123"/>
-        <set-payload value="{'name':'user', 'ord': 'none'}"/>
+        <!-- Initialize payload with proper structure -->
+        <set-payload value="{'name':'user', 'ord': 'none'}" doc:name="Initialize Payload"/>
 
-        <!-- Worst DataWeave ever written -->
-        <ee:transform doc:name="Transform Message" doc:id="209452dd-65dd-4d5d-999b-1f14060462e7" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/json
----
-{
-    user: payload.nam,
-    num: vars.x != null ? vars.x : vars.y otherwise "ok",
-    a: payload.qtyyy + 'aaa'
-}]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
+        <!-- Validate payload structure -->
+        <validation:is-not-null doc:name="Validate Payload" value="#[payload]" message="Payload cannot be null"/>
 
-        <!-- Logging secrets -->
-        <logger level="INFO" message="Calling with token: Bearer 123456789SECRET"/>
+        <!-- Transform using external DWL file -->
+        <ee:transform doc:name="Transform Payload" doc:id="209452dd-65dd-4d5d-999b-1f14060462e7">
+            <ee:message>
+                <ee:set-payload resource="dwl/transform-payload.dwl"/>
+            </ee:message>
+        </ee:transform>
 
-        <!-- No headers set, no validation, no response handling -->
-        <http:request method="POST" url="http://external-api.internal/api" config-ref="HTTP_Request_configuration"/>
+        <!-- Proper logging without sensitive data -->
+        <logger level="INFO" doc:name="Log Request" message="Calling external API with correlation ID: #[correlationId]" category="com.mycompany.api"/>
 
-        <!-- Redundant payload override again -->
-        <set-payload value="{ 'status': 'done', 'message': 'ok' }"/>
+        <!-- Set request headers -->
+        <set-variable variableName="requestHeaders" value="#[{'Content-Type': 'application/json', 'Accept': 'application/json'}]" doc:name="Set Request Headers"/>
+
+        <!-- Make HTTP request with proper error handling -->
+        <try doc:name="Try">
+            <http:request method="${http.request.method}" url="${http.request.url}" config-ref="HTTP_Request_configuration" doc:name="Call External API">
+                <http:headers>#[vars.requestHeaders]</http:headers>
+            </http:request>
+            <error-handler>
+                <on-error-propagate type="HTTP:CONNECTIVITY">
+                    <set-variable variableName="httpStatus" value="503" doc:name="Set Status 503"/>
+                    <set-payload value="#[{'status': 'error', 'message': 'External service unavailable', 'code': 'SERVICE_UNAVAILABLE'}]" doc:name="Service Unavailable Message"/>
+                    <logger level="ERROR" doc:name="Log Connectivity Error" message="Connectivity error: #[error.description]" category="com.mycompany.error"/>
+                </on-error-propagate>
+                <on-error-propagate type="HTTP:BAD_REQUEST">
+                    <set-variable variableName="httpStatus" value="400" doc:name="Set Status 400"/>
+                    <set-payload value="#[{'status': 'error', 'message': 'Bad request', 'code': 'BAD_REQUEST'}]" doc:name="Bad Request Message"/>
+                    <logger level="WARN" doc:name="Log Bad Request" message="Bad request: #[error.description]" category="com.mycompany.error"/>
+                </on-error-propagate>
+                <on-error-propagate type="ANY">
+                    <set-variable variableName="httpStatus" value="500" doc:name="Set Status 500"/>
+                    <set-payload value="#[{'status': 'error', 'message': 'Internal server error', 'code': 'INTERNAL_ERROR'}]" doc:name="Internal Error Message"/>
+                    <logger level="ERROR" doc:name="Log General Error" message="Error occurred: #[error.description]" category="com.mycompany.error"/>
+                </on-error-propagate>
+            </error-handler>
+        </try>
+
+        <!-- Set success response -->
+        <set-payload value="#[{'status': 'done', 'message': 'ok'}]" doc:name="Set Success Response"/>
+        <set-variable variableName="httpStatus" value="200" doc:name="Set Status 200"/>
+        <logger level="INFO" doc:name="Log Response" message="Request processed successfully" category="com.mycompany.api"/>
     </flow>
-
 </mule>

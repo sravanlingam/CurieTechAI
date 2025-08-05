@@ -1,0 +1,15 @@
+# Configuration properties
+http:
+  listener:
+    host: "0.0.0.0"
+    port: "9090"
+    path: "/go"
+  request:
+    url: "http://external-api.internal/api"
+    method: "POST"
+
+# Credentials (should be encrypted in production)
+security:
+  basic:
+    username: "${secure::basic.auth.username}"
+    password: "${secure::basic.auth.password}"

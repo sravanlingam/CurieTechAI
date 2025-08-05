@@ -1,0 +1,11 @@
+curl -X POST "https://platform.curietech.ai/api/code-review/run" \
+  -H "Authorization: Bearer sk-cur-Cr6ChnYiuHnYKFBY8wuG64JLWiuldAJirhxMduNdgdCIbL2X" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conn_type": "One of: github",
+    "org_name": "MuleSoft TechZone",
+    "repo_name": "myfirsttestproject",
+    "branch_name": "feature-1",
+    "pr_number": 1,
+    "prompt": "[Optional] Any additional instructions for the code review agent"
+  }'

@@ -1,5 +1,5 @@
 curl -X POST "https://platform.curietech.ai/api/code-review/run" \
-  -H "Authorization: Bearer sk-cur-Cr6ChnYiuHnYKFBY8wuG64JLWiuldAJirhxMduNdgdCIbL2X" \
+  -H "Authorization: Bearer sk-cur-N0SLiNofYjgesGGN6Ci8UEZPLZ5jaRJBLCWzRc9a08wbDhE2" \
   -H "Content-Type: application/json" \
   -d '{
     "conn_type": "One of: github",
